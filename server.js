@@ -43,8 +43,6 @@ function extractPartien(text) {
       line
         .replace(/[¥¤¢¦©®]/g, '')
         .replace(/\[[^\]]*\]/g, '')
-        .replace(/CBM|ext|Fritz|\/|\\|vs/gi, '')
-        .replace(/[^\x20-\x7EÄÖÜäöüß.,\-–0-9A-Za-z]/g, '')
         .trim()
     )
     .filter(line => line.length > 0);
@@ -54,7 +52,7 @@ function extractPartien(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Zugzeile
+    // Zugbeginn
     if (line.startsWith('1.')) {
       let zuege = line;
       let j = i + 1;
@@ -67,7 +65,7 @@ function extractPartien(text) {
         j++;
       }
 
-      // Ergebnis suchen
+      // Ergebnis
       let ergebnis = '';
       while (j < lines.length && ergebnis === '') {
         const ergMatch = lines[j].match(/(1–0|0–1|½–½)/);
@@ -77,32 +75,29 @@ function extractPartien(text) {
         j++;
       }
 
-      // Spieler rückblickend suchen (max. 5 Zeilen hoch)
+      // Nur den Teil vor Analyse & Kommentaren behalten
+      zuege = zuege.split(/CBM|ext|Fritz|– \(/)[0].trim();
+
+      // Rückblickend Spieler & Datum suchen
       let spieler = 'Unbekannt';
       let gegner = 'n/a';
       let datum = '0000-00-00';
 
       for (let k = i - 1; k >= Math.max(0, i - 5); k--) {
-        const candidate = lines[k];
-        const datumMatch = candidate.match(/(\d{2}\.\d{2}\.\d{4})/);
-        if (datumMatch && datum === '0000-00-00') {
-          datum = formatDatum(datumMatch[1]);
-        }
+        const l = lines[k];
+        const dmatch = l.match(/(\d{2}\.\d{2}\.\d{4})/);
+        if (dmatch && datum === '0000-00-00') datum = formatDatum(dmatch[1]);
 
-        if (
-          candidate.includes('–') &&
-          candidate.includes(',') &&
-          /^[A-ZÄÖÜa-zäöüß-]{2,},\s?[A-ZÄÖÜ]/.test(candidate.split('–')[0]) &&
-          !candidate.match(/(\d{4}|CBM|ext|Fritz|vs|\/)/)
-        ) {
-          const [s, g] = candidate.split('–').map(t => t.trim());
-          spieler = s;
-          gegner = g || 'n/a';
-          break;
+        if (l.includes('–') && l.match(/[A-Za-zÄÖÜäöüß]+\s*,?\s*[A-Za-zÄÖÜäöüß]/)) {
+          const [s, g] = l.split('–').map(x => x.trim());
+          if (s.length > 2 && s.length < 100) {
+            spieler = s;
+            gegner = g || 'n/a';
+            break;
+          }
         }
       }
 
-      // Nur speichern, wenn Zug + Ergebnis + Spieler gültig
       if (
         zuege.length > 10 &&
         ergebnis &&
