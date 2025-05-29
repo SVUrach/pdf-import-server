@@ -41,79 +41,84 @@ function extractPartien(text) {
     .split('\n')
     .map(line =>
       line
-        .replace(/[¥¤¢¦©®]/g, '')                 // Sonderzeichen entfernen
-        .replace(/\[[^\]]*\]/g, '')               // PGN-Kommentare entfernen
-        .replace(/CBM|ext|Fritz|\/|\\/, '')        // typische Analysewörter raus
-        .replace(/[^\x20-\x7EÄÖÜäöüß.,\-–0-9A-Za-z]/g, '') // Sonderzeichen raus
+        .replace(/[¥¤¢¦©®]/g, '')
+        .replace(/\[[^\]]*\]/g, '')
+        .replace(/CBM|ext|Fritz|\/|\\|vs/gi, '')
+        .replace(/[^\x20-\x7EÄÖÜäöüß.,\-–0-9A-Za-z]/g, '')
         .trim()
     )
     .filter(line => line.length > 0);
 
   const partien = [];
-  let aktuellePartie = {
-    spieler: 'Unbekannt',
-    gegner: 'n/a',
-    datum: '0000-00-00',
-    zuege: '',
-    ergebnis: '',
-    event: 'PDF-Import'
-  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Datum erkennen
-    const datumMatch = line.match(/(\d{2}\.\d{2}\.\d{4})/);
-    if (datumMatch) {
-      aktuellePartie.datum = formatDatum(datumMatch[1]);
-    }
-
-    // Spielerzeile (nur echte Namen, z. B. „Name, V. – Name, V.“)
-    if (line.includes('–') && line.includes(',')) {
-      const [spieler, gegner] = line.split('–').map(s => s.trim());
-      const valid = /^[A-ZÄÖÜa-zäöüß-]{2,},\s?[A-ZÄÖÜ]/.test(spieler);
-      if (valid) {
-        aktuellePartie.spieler = spieler;
-        aktuellePartie.gegner = gegner || 'n/a';
-      }
-    }
-
-    // Züge erfassen
+    // Zugzeile
     if (line.startsWith('1.')) {
-      aktuellePartie.zuege = line;
+      let zuege = line;
       let j = i + 1;
-
       while (
         j < lines.length &&
-        !lines[j].match(/^([A-ZÄÖÜa-zäöüß]+,|1–0|0–1|½–½)/)
+        !lines[j].match(/(1–0|0–1|½–½)/) &&
+        !lines[j].startsWith('1.')
       ) {
-        aktuellePartie.zuege += ' ' + lines[j];
+        zuege += ' ' + lines[j];
         j++;
       }
-    }
 
-    // Ergebnis erkennen
-    const ergMatch = line.match(/(1–0|0–1|½–½)/);
-    if (ergMatch) {
-      aktuellePartie.ergebnis = ergMatch[1];
-
-      if (
-        aktuellePartie.zuege.startsWith('1.') &&
-        aktuellePartie.zuege.length > 10 &&
-        !aktuellePartie.zuege.includes('CBM') &&
-        aktuellePartie.spieler !== 'Unbekannt'
-      ) {
-        partien.push({ ...aktuellePartie });
+      // Ergebnis suchen
+      let ergebnis = '';
+      while (j < lines.length && ergebnis === '') {
+        const ergMatch = lines[j].match(/(1–0|0–1|½–½)/);
+        if (ergMatch) {
+          ergebnis = ergMatch[1];
+        }
+        j++;
       }
 
-      aktuellePartie = {
-        spieler: 'Unbekannt',
-        gegner: 'n/a',
-        datum: '0000-00-00',
-        zuege: '',
-        ergebnis: '',
-        event: 'PDF-Import'
-      };
+      // Spieler rückblickend suchen (max. 5 Zeilen hoch)
+      let spieler = 'Unbekannt';
+      let gegner = 'n/a';
+      let datum = '0000-00-00';
+
+      for (let k = i - 1; k >= Math.max(0, i - 5); k--) {
+        const candidate = lines[k];
+        const datumMatch = candidate.match(/(\d{2}\.\d{2}\.\d{4})/);
+        if (datumMatch && datum === '0000-00-00') {
+          datum = formatDatum(datumMatch[1]);
+        }
+
+        if (
+          candidate.includes('–') &&
+          candidate.includes(',') &&
+          /^[A-ZÄÖÜa-zäöüß-]{2,},\s?[A-ZÄÖÜ]/.test(candidate.split('–')[0]) &&
+          !candidate.match(/(\d{4}|CBM|ext|Fritz|vs|\/)/)
+        ) {
+          const [s, g] = candidate.split('–').map(t => t.trim());
+          spieler = s;
+          gegner = g || 'n/a';
+          break;
+        }
+      }
+
+      // Nur speichern, wenn Zug + Ergebnis + Spieler gültig
+      if (
+        zuege.length > 10 &&
+        ergebnis &&
+        spieler !== 'Unbekannt'
+      ) {
+        partien.push({
+          spieler,
+          gegner,
+          datum,
+          zuege,
+          ergebnis,
+          event: 'PDF-Import'
+        });
+      }
+
+      i = j - 1;
     }
   }
 
