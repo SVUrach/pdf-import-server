@@ -52,7 +52,6 @@ function extractPartien(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Zugbeginn
     if (line.startsWith('1.')) {
       let zuege = line;
       let j = i + 1;
@@ -65,7 +64,6 @@ function extractPartien(text) {
         j++;
       }
 
-      // Ergebnis
       let ergebnis = '';
       while (j < lines.length && ergebnis === '') {
         const ergMatch = lines[j].match(/(1–0|0–1|½–½)/);
@@ -75,10 +73,8 @@ function extractPartien(text) {
         j++;
       }
 
-      // Nur den Teil vor Analyse & Kommentaren behalten
       zuege = zuege.split(/CBM|ext|Fritz|– \(/)[0].trim();
 
-      // Rückblickend Spieler & Datum suchen
       let spieler = 'Unbekannt';
       let gegner = 'n/a';
       let datum = '0000-00-00';
@@ -88,7 +84,11 @@ function extractPartien(text) {
         const dmatch = l.match(/(\d{2}\.\d{2}\.\d{4})/);
         if (dmatch && datum === '0000-00-00') datum = formatDatum(dmatch[1]);
 
-        if (l.includes('–') && l.match(/[A-Za-zÄÖÜäöüß]+\s*,?\s*[A-Za-zÄÖÜäöüß]/)) {
+        if (
+          l.includes('–') &&
+          (l.includes(',') || l.includes('.')) &&
+          !l.match(/^\d|\b(Weiß|gibt|auf|vs|verlor|gewann)\b/i)
+        ) {
           const [s, g] = l.split('–').map(x => x.trim());
           if (s.length > 2 && s.length < 100) {
             spieler = s;
