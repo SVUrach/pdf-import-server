@@ -40,22 +40,30 @@ function extractPartien(text) {
   const blocks = text.split(/\n\s*\n/);
   const partien = [];
 
-  for (let block of blocks) {
-    if (block.includes('1. ')) {
-      const zeilen = block.split('\n');
-      const datum = zeilen.find((z) => z.match(/\d{2}\.\d{2}\.\d{4}/));
-      const spieler = zeilen.find((z) => z.match(/, [A-Z]/));
-      const gegner = zeilen[1]?.trim() || 'Unbekannt';
-      const zuege = zeilen.find((z) => z.startsWith('1.')) || '';
-      const ergebnis = block.includes('1–0') ? '1–0' : block.includes('0–1') ? '0–1' : '½–½';
+  let aktuellesDatum = null;
 
-      if (spieler && gegner && datum && zuege.length > 10) {
+  for (let block of blocks) {
+    // Datum suchen wie "16.03.2025"
+    const datumsMatch = block.match(/(\d{2}\.\d{2}\.\d{4})/);
+    if (datumsMatch) {
+      aktuellesDatum = formatDatum(datumsMatch[1]);
+    }
+
+    if (block.includes('1. ') && (block.includes('1–0') || block.includes('0–1') || block.includes('½–½'))) {
+      const zuegeMatch = block.match(/1\..+/s);
+      const ergebnisMatch = block.match(/(1–0|0–1|½–½)/);
+      const spielerName = block.split('\n')[0]?.split(',')[0]?.trim();
+
+      if (zuegeMatch && ergebnisMatch) {
         partien.push({
-          spieler: spieler.trim(),
-          gegner: gegner.trim(),
-          datum: formatDatum(datum),
-          zuege: zuege.trim(),
-          ergebnis,
+          spieler: spielerName || 'Unbekannt',
+          gegner: 'n/a',
+          datum: aktuellesDatum || '0000-00-00',
+          zuege: zuegeMatch[0]
+            .trim()
+            .replace(/\[[^\]]*\]/g, '')  // entferne [Kommentare]
+            .replace(/\s+/g, ' '),       // mehrfaches Leerzeichen entfernen
+          ergebnis: ergebnisMatch[1],
           event: 'PDF-Import'
         });
       }
@@ -66,7 +74,7 @@ function extractPartien(text) {
 }
 
 function formatDatum(d) {
-  const [tag, monat, jahr] = d.match(/\d{2}/g);
+  const [tag, monat, jahr] = d.split('.');
   return `${jahr}-${monat}-${tag}`;
 }
 
