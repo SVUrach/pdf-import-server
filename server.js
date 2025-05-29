@@ -37,9 +37,14 @@ app.post('/import', upload.single('file'), async (req, res) => {
 });
 
 function extractPartien(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  const partien = [];
+  const lines = text.split('\n').map(l =>
+    l
+      .replace(/[¥¤¢¦©®]/g, '') // entferne Sonderzeichen
+      .replace(/[^\x20-\x7EÄÖÜäöüß.,\-–0-9A-Za-z]/g, '') // entferne alles Nicht-Textliche außer Umlauten und Satzzeichen
+      .trim()
+  ).filter(l => l.length > 0);
 
+  const partien = [];
   let aktuellePartie = {
     spieler: 'Unbekannt',
     gegner: 'n/a',
@@ -52,37 +57,39 @@ function extractPartien(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Datum erkennen
+    // Datum
     const datumMatch = line.match(/(\d{2}\.\d{2}\.\d{4})/);
     if (datumMatch) {
       aktuellePartie.datum = formatDatum(datumMatch[1]);
     }
 
-    // Spielerzeile (z. B. „Müller, A. – Schmidt, B.“)
+    // Spielerzeile (z. B. „Name, V. – Gegner, X.“)
     if (line.includes('–') && line.includes(',')) {
-      const [spieler, gegner] = line.split('–').map(p => p.trim());
-      aktuellePartie.spieler = spieler || 'Unbekannt';
-      aktuellePartie.gegner = gegner || 'n/a';
+      const [spieler, gegner] = line.split('–').map(s => s.trim());
+      if (spieler && spieler.match(/[A-Za-zÄÖÜäöüß]+\s*,\s*[A-ZÄÖÜ]/)) {
+        aktuellePartie.spieler = spieler;
+        aktuellePartie.gegner = gegner || 'n/a';
+      }
     }
 
-    // Züge beginnen mit „1.“ und enden typischerweise mit „1–0“ etc.
+    // Zugbeginn
     if (line.match(/^1\./)) {
       aktuellePartie.zuege = line;
-      // Folgezeilen einfügen, solange sie keine neue Partie einleiten
       let j = i + 1;
-      while (j < lines.length && !lines[j].match(/^\d+\./) && !lines[j].includes('–')) {
+      while (j < lines.length && !lines[j].match(/^([A-ZÄÖÜa-zäöüß]+,|1–0|0–1|½–½)/)) {
         aktuellePartie.zuege += ' ' + lines[j];
         j++;
       }
     }
 
-    // Ergebnis finden
+    // Ergebnis
     if (line.match(/(1–0|0–1|½–½)/)) {
       aktuellePartie.ergebnis = line.match(/(1–0|0–1|½–½)/)[1];
 
-      // Wenn Zugfolge und Spieler vorhanden → speichern
       if (aktuellePartie.zuege.length > 10) {
         partien.push({ ...aktuellePartie });
+
+        // Neue Partie vorbereiten
         aktuellePartie = {
           spieler: 'Unbekannt',
           gegner: 'n/a',
