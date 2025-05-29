@@ -84,11 +84,7 @@ function extractPartien(text) {
         const dmatch = l.match(/(\d{2}\.\d{2}\.\d{4})/);
         if (dmatch && datum === '0000-00-00') datum = formatDatum(dmatch[1]);
 
-        if (
-          l.includes('–') &&
-          (l.includes(',') || l.includes('.')) &&
-          !l.match(/^\d|\b(Weiß|gibt|auf|vs|verlor|gewann)\b/i)
-        ) {
+        if (isValidSpielerzeile(l)) {
           const [s, g] = l.split('–').map(x => x.trim());
           if (s.length > 2 && s.length < 100) {
             spieler = s;
@@ -118,6 +114,24 @@ function extractPartien(text) {
   }
 
   return partien;
+}
+
+// Prüft, ob eine Zeile wirklich eine Spielerzeile ist
+function isValidSpielerzeile(line) {
+  const lower = line.toLowerCase();
+  const forbidden = ['weiss', 'weiß', 'remis', 'gibt', 'auf', 'vs', 'cbm', 'fritz', 'ext', 'kommentar'];
+  if (
+    !line.includes('–') ||
+    line.match(/^\d/) ||                          // beginnt mit Zahl (z. B. 88.xc6)
+    forbidden.some(w => lower.includes(w)) ||    // enthält typische Müllwörter
+    line.length < 5
+  ) {
+    return false;
+  }
+
+  // Gültig, wenn Komma oder Punkt ODER mindestens zwei Wörter (echter Name)
+  const words = line.split(/\s+/);
+  return line.includes(',') || line.includes('.') || words.length >= 2;
 }
 
 function formatDatum(d) {
