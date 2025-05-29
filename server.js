@@ -116,22 +116,32 @@ function extractPartien(text) {
   return partien;
 }
 
-// Prüft, ob eine Zeile wirklich eine Spielerzeile ist
+// Superrobuste Spielerzeilen-Erkennung
 function isValidSpielerzeile(line) {
   const lower = line.toLowerCase();
-  const forbidden = ['weiss', 'weiß', 'remis', 'gibt', 'auf', 'vs', 'cbm', 'fritz', 'ext', 'kommentar'];
+  const forbidden = [
+    'weiss', 'weiß', 'remis', 'gibt', 'auf', 'vs',
+    'cbm', 'fritz', 'ext', 'kommentar', '+–', '#', '0 vs 1', '1 vs 0'
+  ];
+
+  const isZugNotation =
+    line.match(/^\s*[a-hA-H]?[1-8]?\.{1,3}/) || // z.B. "1.e4", "a4."
+    line.match(/^\d{1,2}\.{1,3}/);             // z.B. "88...Nc6"
+
   if (
     !line.includes('–') ||
-    line.match(/^\d/) ||                          // beginnt mit Zahl (z. B. 88.xc6)
-    forbidden.some(w => lower.includes(w)) ||    // enthält typische Müllwörter
+    isZugNotation ||
+    forbidden.some(w => lower.includes(w)) ||
     line.length < 5
   ) {
     return false;
   }
 
-  // Gültig, wenn Komma oder Punkt ODER mindestens zwei Wörter (echter Name)
-  const words = line.split(/\s+/);
-  return line.includes(',') || line.includes('.') || words.length >= 2;
+  const words = line.trim().split(/\s+/);
+  const hasKommaName = line.includes(',');
+  const hasFullName = words.length >= 2 && words.every(w => /^[A-Za-zÄÖÜäöüß().\-]+$/.test(w));
+
+  return hasKommaName || hasFullName;
 }
 
 function formatDatum(d) {
