@@ -1,9 +1,7 @@
-import express from 'express';
-import multer from 'multer';
-import pkg from 'pdf-parse';
-import { createClient } from '@supabase/supabase-js';
-
-const pdfParse = pkg.default || pkg;
+const express = require('express');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
