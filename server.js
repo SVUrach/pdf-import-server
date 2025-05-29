@@ -37,12 +37,17 @@ app.post('/import', upload.single('file'), async (req, res) => {
 });
 
 function extractPartien(text) {
-  const lines = text.split('\n').map(l =>
-    l
-      .replace(/[¥¤¢¦©®]/g, '') // entferne Sonderzeichen
-      .replace(/[^\x20-\x7EÄÖÜäöüß.,\-–0-9A-Za-z]/g, '') // entferne alles Nicht-Textliche außer Umlauten und Satzzeichen
-      .trim()
-  ).filter(l => l.length > 0);
+  const lines = text
+    .split('\n')
+    .map(line =>
+      line
+        .replace(/[¥¤¢¦©®]/g, '')                 // Sonderzeichen entfernen
+        .replace(/\[[^\]]*\]/g, '')               // PGN-Kommentare entfernen
+        .replace(/CBM|ext|Fritz|\/|\\/, '')        // typische Analysewörter raus
+        .replace(/[^\x20-\x7EÄÖÜäöüß.,\-–0-9A-Za-z]/g, '') // Sonderzeichen raus
+        .trim()
+    )
+    .filter(line => line.length > 0);
 
   const partien = [];
   let aktuellePartie = {
@@ -57,48 +62,58 @@ function extractPartien(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Datum
+    // Datum erkennen
     const datumMatch = line.match(/(\d{2}\.\d{2}\.\d{4})/);
     if (datumMatch) {
       aktuellePartie.datum = formatDatum(datumMatch[1]);
     }
 
-    // Spielerzeile (z. B. „Name, V. – Gegner, X.“)
+    // Spielerzeile (nur echte Namen, z. B. „Name, V. – Name, V.“)
     if (line.includes('–') && line.includes(',')) {
       const [spieler, gegner] = line.split('–').map(s => s.trim());
-      if (spieler && spieler.match(/[A-Za-zÄÖÜäöüß]+\s*,\s*[A-ZÄÖÜ]/)) {
+      const valid = /^[A-ZÄÖÜa-zäöüß-]{2,},\s?[A-ZÄÖÜ]/.test(spieler);
+      if (valid) {
         aktuellePartie.spieler = spieler;
         aktuellePartie.gegner = gegner || 'n/a';
       }
     }
 
-    // Zugbeginn
-    if (line.match(/^1\./)) {
+    // Züge erfassen
+    if (line.startsWith('1.')) {
       aktuellePartie.zuege = line;
       let j = i + 1;
-      while (j < lines.length && !lines[j].match(/^([A-ZÄÖÜa-zäöüß]+,|1–0|0–1|½–½)/)) {
+
+      while (
+        j < lines.length &&
+        !lines[j].match(/^([A-ZÄÖÜa-zäöüß]+,|1–0|0–1|½–½)/)
+      ) {
         aktuellePartie.zuege += ' ' + lines[j];
         j++;
       }
     }
 
-    // Ergebnis
-    if (line.match(/(1–0|0–1|½–½)/)) {
-      aktuellePartie.ergebnis = line.match(/(1–0|0–1|½–½)/)[1];
+    // Ergebnis erkennen
+    const ergMatch = line.match(/(1–0|0–1|½–½)/);
+    if (ergMatch) {
+      aktuellePartie.ergebnis = ergMatch[1];
 
-      if (aktuellePartie.zuege.length > 10) {
+      if (
+        aktuellePartie.zuege.startsWith('1.') &&
+        aktuellePartie.zuege.length > 10 &&
+        !aktuellePartie.zuege.includes('CBM') &&
+        aktuellePartie.spieler !== 'Unbekannt'
+      ) {
         partien.push({ ...aktuellePartie });
-
-        // Neue Partie vorbereiten
-        aktuellePartie = {
-          spieler: 'Unbekannt',
-          gegner: 'n/a',
-          datum: '0000-00-00',
-          zuege: '',
-          ergebnis: '',
-          event: 'PDF-Import'
-        };
       }
+
+      aktuellePartie = {
+        spieler: 'Unbekannt',
+        gegner: 'n/a',
+        datum: '0000-00-00',
+        zuege: '',
+        ergebnis: '',
+        event: 'PDF-Import'
+      };
     }
   }
 
