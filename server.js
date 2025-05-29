@@ -1,7 +1,9 @@
 import express from 'express';
 import multer from 'multer';
-import pdfParse from 'pdf-parse';
+import pkg from 'pdf-parse';
 import { createClient } from '@supabase/supabase-js';
+
+const pdfParse = pkg.default || pkg;
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -11,9 +13,11 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 app.post('/import', upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).send('Keine Datei erhalten');
+  if (!req.file) return res.status(400).send('❌ Keine Datei erhalten.');
 
   try {
+    console.log(`📥 Datei empfangen: ${req.file.originalname}`);
+
     const data = await pdfParse(req.file.buffer);
     const text = data.text;
 
@@ -23,11 +27,13 @@ app.post('/import', upload.single('file'), async (req, res) => {
     for (const p of partien) {
       const { error } = await supabase.from('partien').insert(p);
       if (!error) inserted++;
+      else console.error('❌ Fehler beim Einfügen:', error.message);
     }
 
+    console.log(`✅ ${inserted} Partien importiert.`);
     res.send(`✅ ${inserted} Partien erfolgreich importiert.`);
   } catch (err) {
-    console.error(err);
+    console.error('❌ Fehler beim Verarbeiten der PDF:', err.message);
     res.status(500).send('Fehler beim Verarbeiten der PDF.');
   }
 });
@@ -67,7 +73,7 @@ function formatDatum(d) {
 }
 
 app.get('/', (req, res) => {
-  res.send('📥 PDF-Import-Server läuft.');
+  res.send('📡 PDF-Import-Server läuft.');
 });
 
 const PORT = process.env.PORT || 3000;
